@@ -1,4 +1,6 @@
 ## Docker Repository
+#### Install Plugin CloudBees Docker build and Plubish
+> [CloudBees Docker build and Plubish](https://wiki.jenkins.io/display/JENKINS/CloudBees+Docker+Build+and+Publish+plugin)
 #### Add Credentials
 ```
 Credentials > global > add credentials
