@@ -1,0 +1,13 @@
+node('node-1') {
+  def commit_id
+  stage('Preparation') {
+    checkout scm
+    sh "git rev-parse --short HEAD > .git/commit-id"
+    commit_id = readFile('.git/commit-id').trim()
+  }
+  stage('s3') {
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'aws-s3', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+      sh 'aws s3 cp s3://<bucket_name>/test.txt file.txt'
+    }
+  }
+}

@@ -1,0 +1,44 @@
+node('node-1') {
+  def commit_id
+  stage('Preparation') {
+    try {
+      checkout scm
+      sh "git rev-parse --short HEAD > .git/commit-id"
+      commit_id = readFile('.git/commit-id').trim()
+    }
+    catch(e) {
+      currentBuild.result = "FAILURE";
+      notifyFail('Preparation')
+      throw e;
+    }
+  }
+  stage('update a deployment') {
+    notifyDeploy()
+  }
+}
+
+// error
+def notifyFail(String buildStatus = 'Preparation') {
+  def icons = [":fire:", ":scream:", ":rage:", ":face_with_rolling_eyes:",
+    ":broken_heart:", ":ghost:", ":thunder_cloud_and_rain:", ":face_with_head_bandage:"]
+
+  def randomIndex = (new Random()).nextInt(icons.size())
+
+  def message = "@channel *`FAILED`*: ${buildStatus} ${icons[randomIndex]} <${env.BUILD_URL}|${currentBuild.displayName}> " +
+    "failure deployed to the development :fire:"
+
+  slackSend(message: message, color: 'danger')
+}
+
+// success
+def notifyDeploy() {
+  def icons = [":unicorn_face:", ":beer:", ":bee:", ":man_dancing:",
+    ":confetti_ball:", ":ghost:", ":dancer:", ":scream_cat:"]
+
+  def randomIndex = (new Random()).nextInt(icons.size())
+
+  def message = "Build <${env.BUILD_URL}|${currentBuild.displayName}> " +
+    "successfuly deployed to the development ${icons[randomIndex]}"
+
+  slackSend(message: message, color: 'good')
+}
