@@ -1,0 +1,13 @@
+node('node-1') {
+  def commit_id
+  stage('Preparation') {
+    checkout scm
+    sh "git rev-parse --short HEAD > .git/commit-id"
+    commit_id = readFile('.git/commit-id').trim()
+  }
+  stage('docker build/push') {
+    docker.withRegistry('https://docker.xxx.net/', 'docker-repositorys') {
+      def app = docker.build("docker.xxx.net/repo/docker-image:${commit_id}", '.').push()
+    }
+  }
+}
