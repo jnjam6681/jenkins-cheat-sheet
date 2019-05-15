@@ -1,0 +1,14 @@
+node('node-1') {
+  stage('docker') {
+    def myTestContainer = docker.image('node:8.10')
+    myTestContainer.pull()
+    myTestContainer.inside {
+      sh 'npm install'
+    }
+    def myContainer = docker.image('node:11.0')
+    myContainer.pull()
+    myContainer.inside {
+      sh 'npm install nodemon'
+    }
+  }
+}
