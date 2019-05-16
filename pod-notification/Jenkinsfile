@@ -1,0 +1,31 @@
+node('mea-trading-dev') {
+  stage('update a deployment') {
+    def podName = "frontend-pod"
+    sh "kubectl set image deployments/frontend-pod frontend-pod=docker.xxx.net/repo/frontend-pod"
+    curlTest(podName)
+  }
+}
+
+def curlTest(podName) {
+  sh 'sleep 20'
+  sh 'kubectl get pods -o wide'
+  def pod_ip = sh(
+    returnStdout: true,
+    script: "kubectl get pods -o wide --sort-by=.metadata.creationTimestamp | grep ${podName} | grep 0/1 | awk '{print \$6}'"
+  )
+
+  if(pod_ip.equals('')) {
+    echo "ERROR: Getting pod IP failed"
+    throw new RuntimeException('PodIPFailed')
+  }
+
+  echo "pod_ip is ${pod_ip}"
+  url = 'http://' + pod_ip
+
+  def result = sh(
+    returnStdout: true,
+    script: "curl --output /dev/null --silent --connect-timeout 10 --max-time 5 --retry 5 --retry-delay 5 --retry-max-time 30 --write-out %{response_code} ${url}"
+  )
+
+  echo "Result: ${result}"
+}
