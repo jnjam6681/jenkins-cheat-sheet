@@ -27,7 +27,7 @@ def notifyFail(String buildStatus = 'Preparation') {
   def message = "@channel *`FAILED`*: ${buildStatus} ${icons[randomIndex]} <${env.BUILD_URL}|${currentBuild.displayName}> " +
     "failure deployed to the development :fire:"
 
-  slackSend(message: message, color: 'danger')
+  slackSend(channel: '#general', message: message, color: 'danger')
 }
 
 // success
@@ -40,5 +40,5 @@ def notifyDeploy() {
   def message = "Build <${env.BUILD_URL}|${currentBuild.displayName}> " +
     "successfuly deployed to the development ${icons[randomIndex]}"
 
-  slackSend(message: message, color: 'good')
+  slackSend(channel: '#general', message: message, color: 'good')
 }
