@@ -1,0 +1,23 @@
+node('mea-trading-dev') {
+  stage('update a deployment') {
+    def podName = "frontend-pod"
+    sh "kubectl set image deployments/frontend-pod frontend-pod=docker.xxx.net/repo/frontend-pod"
+    waitForPodsRunning(podName)
+  }
+}
+
+def waitForPodsRunning(podName) {
+  sh 'sleep 25'
+  timeout(30) {
+    while(true) {
+      def podStatus = sh(returnStdout: true, script: "kubectl get pods --no-headers | grep ${podName}").trim()
+      def notRunning = podStatus.readLines().findAll { line -> !line.contains('1/1') }
+      if (notRunning.isEmpty()) {
+        echo 'Pod are running'
+        break
+      }
+      sh 'kubectl get pods'
+      sh 'sleep 5'
+    }
+  }
+}
