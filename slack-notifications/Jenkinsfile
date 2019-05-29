@@ -8,7 +8,7 @@ node('node-1') {
     }
     catch(e) {
       currentBuild.result = "FAILURE";
-      notifyFail('Preparation')
+      notifyFail('Preparation', e)
       throw e;
     }
   }
@@ -18,16 +18,30 @@ node('node-1') {
 }
 
 // error
-def notifyFail(String buildStatus = 'Preparation') {
+def notifyFail(String buildStatus = 'Preparation', e) {
   def icons = [":fire:", ":scream:", ":rage:", ":face_with_rolling_eyes:",
     ":broken_heart:", ":ghost:", ":thunder_cloud_and_rain:", ":face_with_head_bandage:"]
 
   def randomIndex = (new Random()).nextInt(icons.size())
 
-  def message = "@channel *`FAILED`*: ${buildStatus} ${icons[randomIndex]} <${env.BUILD_URL}|${currentBuild.displayName}> " +
-    "failure deployed to the development :fire:"
+  // def message = "@channel *`FAILED`*: ${buildStatus} ${icons[randomIndex]} <${env.BUILD_URL}|${currentBuild.displayName}> " +
+  //   "failure deployed to the development :fire:"
 
-  slackSend(channel: '#general', message: message, color: 'danger')
+  // slackSend(channel: '#general', message: message, color: 'danger')
+
+  def attachments = [
+    [
+      text: "@channel *`FAILED`*: ${buildStatus} ${icons[randomIndex]} <${env.BUILD_URL}|${currentBuild.displayName}> failure deployed to the development :fire:",
+      color: 'danger'
+    ],
+    [
+      text: "```${e}```",
+      short: false,
+      color: 'danger'
+    ]
+  ]
+
+  slackSend(channel: '#general', attachments: attachments)
 }
 
 // success
