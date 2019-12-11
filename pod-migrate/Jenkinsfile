@@ -1,0 +1,24 @@
+node('node-1') {
+  def commit_id
+  stage('Preparation') {
+    try {
+      checkout scm
+      sh "git rev-parse --short HEAD > .git/commit-id"
+      commit_id = readFile('.git/commit-id').trim()+"$BUILD_NUMBER"
+    } catch(e) {
+      currentBuild.result = "FAILURE";
+      notifyFail('Preparation', e)
+      throw e;
+    }
+  }
+  stage('migrate database'){
+    try {
+        def pod_name = sh(returnStdout: true, script: "kubectl get pods --no-headers | grep frontend | awk '{print \$1}' | head -n 1").trim()
+        sh "kubectl exec -it ${pod_name} -- node_modules/.bin/sequelize db:migrate"
+    } catch(e) {
+      currentBuild.result = "FAILURE";
+      notifyFail('Migrate Database', e)
+      throw e;
+    }
+  }
+}
