@@ -1,0 +1,13 @@
+node('node-1') {
+  def commit_id
+  def remote = [:]
+  remote.name = 'test'
+  remote.host = '10.xx.x.xx'
+  remote.user = 'ubuntu'
+  remote.password = 'ubuntu'
+  remote.allowAnyHosts = true
+
+  stage('ssh command') {
+    sshCommand remote: remote, command: "ls -a"
+  }
+}
