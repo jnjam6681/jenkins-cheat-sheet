@@ -1,4 +1,4 @@
-node('mea-trading-dev') {
+node('node-1') {
   stage('update a deployment') {
     def podName = "frontend-pod"
     sh "kubectl set image deployments/frontend-pod frontend-pod=docker.xxx.net/repo/frontend-pod"
