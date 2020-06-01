@@ -1,0 +1,9 @@
+node('mea-trading-dev') {
+  stage('test') {
+    parallel 'scanner': {
+      // statements
+    }, 'unit-test': {
+      // statements
+    }
+  }
+}
