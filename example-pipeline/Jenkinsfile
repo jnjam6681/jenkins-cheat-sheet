@@ -1,0 +1,303 @@
+#!/usr/bin/env groovy
+
+pipeline {
+    agent any
+
+    environment {
+        REPOSITORY_ACCESS = 'http://'
+        REPOSITORY_MANIFEST = 'github.com/jnjam6681/jenkins-cheat-sheet.git'
+        REPOSITORY_URL = sh(returnStdout: true, script: "echo ${env.GIT_URL} | sed 's|^http[s]://||g'").trim()
+        
+        GCP_PROJECT_ID = 'projec-1'
+        PROJECT_NAME = 'project'
+        APP_NAME = "${config.APP_NAME}"
+        VERSION_REGEX = /^(\d+\.)?(\d+\.)?(\*|\d+)$/
+
+        GITLAB_SECRET = credentials('8933a2c7')
+        GITLAB_EMAIL = 'test@gmail.com'
+        GITLAB_USER = 'jnjam6681'
+    }
+
+    stages {
+        stage('Initialize') {
+            steps {
+                script {
+                    scmVars = checkout scm
+                    fullRunEnv = scmVars.GIT_BRANCH
+                    commit_id = scmVars.GIT_COMMIT.take(8)
+                    runEnv = fullRunEnv.substring(7, fullRunEnv.length())
+                    imageName = "gcr.io/${env.GCP_PROJECT_ID}/${runEnv}/${env.PROJECT_NAME}/${env.APP_NAME}"
+                    imageVersion = checkBranchEnviroment(runEnv)
+                    imageTag = "${imageName}:${imageVersion}"
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILURE_STAGE = 'Initialize' }
+                }
+            }
+        }
+
+        stage('Pre Test') {
+            steps {
+                script {
+                    sh """
+                        docker build --target build \
+                        --cache-from ${env.APP_NAME} \
+                        --build-arg GITLAB_USERNAME=${GITLAB_SECRET_USR} \
+                        --build-arg GITLAB_TOKEN=${GITLAB_SECRET_PSW} \
+                        --build-arg AUTH_HMACSECRET=${AUTH_HMACSECRET} \
+                        --build-arg IMAGE_VERSION=${imageVersion} \
+                        -t ${env.APP_NAME} .
+                    """
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILURE_STAGE = 'Pre Test' }
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    sh "docker run -i --rm ${env.APP_NAME} go test ./... --cover -v -tags musl"
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILURE_STAGE = 'Test' }
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                script {
+                    sh """
+                        docker build --target release \
+                        --cache-from ${env.APP_NAME} \
+                        --build-arg GITLAB_USERNAME=${GITLAB_SECRET_USR} \
+                        --build-arg GITLAB_TOKEN=${GITLAB_SECRET_PSW} \
+                        --build-arg IMAGE_VERSION=${imageVersion} \
+                        -t ${imageName}:latest \
+                        -t ${imageName}:${imageVersion} \
+                        "."
+                    """
+
+                    if (runEnv == "prod") {
+                        createNewVersion(imageVersion)
+                    }
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILURE_STAGE = 'Build' }
+                }
+            }
+        }
+
+        stage("Push image to registry") {
+            steps {
+                script {
+                    docker.withRegistry('https://gcr.io', "gcr:${env.GCP_PROJECT_ID}") {
+                        // sh "docker tag ${env.APP_NAME} ${imageName}:latest"
+                        sh "docker push ${imageName}:latest"
+                        // sh "docker tag ${env.APP_NAME} ${imageName}:${imageVersion}"
+                        sh "docker push ${imageName}:${imageVersion}"
+                    }
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILURE_STAGE = 'Push image to registry' }
+                }
+            }
+        }
+
+        stage('Deploy application to GKE - dev') {
+            when {
+                expression { runEnv == "dev" }
+            }
+            steps {
+                git branch: 'master',
+                    url: "${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_MANIFEST}"
+                dir("dev") {
+                    sh "kustomize edit set image ${env.APP_NAME}=${imageTag}"
+                    sh "git add ."
+                    sh "git config --global user.email '${env.GITLAB_EMAIL}'"
+                    sh "git config --global user.name '${env.GITLAB_USER}'"
+                    sh "git commit -m 'Deploy ${env.APP_NAME} ${runEnv}'"
+                    sh "git push ${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_MANIFEST} HEAD:master"
+                }
+                dir("test") {
+                    sh "kustomize edit set image ${env.APP_NAME}=${imageTag}"
+                    sh "git add ."
+                    sh "git config --global user.email '${env.GITLAB_EMAIL}'"
+                    sh "git config --global user.name '${env.GITLAB_USER}'"
+                    sh "git commit -m 'Deploy ${env.APP_NAME} ${runEnv}'"
+                    sh "git push ${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_MANIFEST} HEAD:master"
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILURE_STAGE = 'Deploy application to GKE - dev' }
+                }
+            }
+        }
+
+        stage('Deploy application to GKE - uat') {
+            when {
+                expression { runEnv == "uat" }
+            }
+            steps {
+                git branch: 'master',
+                    url: "${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_MANIFEST}"
+                dir("uat") {
+                    sh "kustomize edit set image ${env.APP_NAME}=${imageTag}"
+                    sh "git add ."
+                    sh "git config --global user.email '${env.GITLAB_EMAIL}'"
+                    sh "git config --global user.name '${env.GITLAB_USER}'"
+                    sh "git commit -m 'Deploy ${env.APP_NAME} ${runEnv}'"
+                    sh "git push ${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_MANIFEST} HEAD:master"
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILURE_STAGE = 'Deploy application to GKE - uat' }
+                }
+            }
+        }
+
+        stage('Deploy application to GKE - staging') {
+            when {
+                expression { runEnv == "staging" }
+            }
+            steps {
+                git branch: 'master',
+                    url: "${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_MANIFEST}"
+                dir("staging") {
+                    sh "kustomize edit set image ${env.APP_NAME}=${imageTag}"
+                    sh "git add ."
+                    sh "git config --global user.email '${env.GITLAB_EMAIL}'"
+                    sh "git config --global user.name '${env.GITLAB_USER}'"
+                    sh "git commit -m 'Deploy ${env.APP_NAME} ${runEnv}'"
+                    sh "git push ${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_MANIFEST} HEAD:master"
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILURE_STAGE = 'Deploy application to GKE - staging' }
+                }
+            }
+        }
+
+        stage('Deploy application to GKE - prod') {
+            when {
+                expression { runEnv == "prod" }
+            }
+            steps {
+                timeout(time: 24, unit: "HOURS") {
+                    input message: 'Do you want to approve the deploy in production?', ok: 'yes'
+                }
+
+                git branch: 'master',
+                    url: "${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_MANIFEST}"
+                dir("prod") {
+                    sh "kustomize edit set image ${env.APP_NAME}=${imageTag}"
+                    sh "git add ."
+                    sh "git config --global user.email '${env.GITLAB_EMAIL}'"
+                    sh "git config --global user.name '${env.GITLAB_USER}'"
+                    sh "git commit -m 'Deploy ${env.APP_NAME} ${runEnv}'"
+                    sh "git push ${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_MANIFEST} HEAD:master"
+                }
+            }
+            post {
+                failure {
+                    script { env.FAILURE_STAGE = 'Deploy application to GKE - prod' }
+                }
+            }
+        }
+    }
+    post {
+        always {
+            deleteDir()
+        }
+
+        failure {
+            script { 
+                echo 'Clean up!'
+                try {
+                    // sh "docker rmi -f \$(docker images --filter 'before=${imageTag}' -a | grep -E '(gcr.io.uoo-01.+gateway)|(gcr.io.uoo-01.+service)|(gcr.io.uoo-01.+api)|none' | awk '{ print \$3; }')"
+                    sh "docker 2>/dev/null 1>&2 rmi `docker images -aq -f reference=${imageName}:*` || true"
+                    // sh "rm -rf facebook-live 2>/dev/null || true"
+                    // sh "docker images -q -f dangling=true | xargs --no-run-if-empty docker rmi"
+                } catch (err) {
+                    echo 'Ignore clean up error case'
+                }
+            }
+        }
+
+        success {
+            script { 
+                try { 
+                    sh "docker 2>/dev/null 1>&2 rmi `docker images -aq -f reference=${imageName}:*` || true"
+                    sh "docker images -q -f dangling=true | xargs --no-run-if-empty docker rmi"
+                } catch (err) {
+                    echo 'Ignore clean up error case'
+                }
+            }
+        }
+    }
+}
+
+def checkBranchEnviroment(String runEnv) {
+    switch(runEnv) {
+        case 'dev':
+            result = "${env.BUILD_NUMBER}-${commit_id}"
+            break
+        case 'staging':
+            result = "${env.BUILD_NUMBER}-${commit_id}"
+            break
+        case 'uat':
+            result = "${env.BUILD_NUMBER}-${commit_id}"
+            break
+        case 'prod':
+            result = getNewVersion()
+            break
+    }
+    return result
+}
+
+def getNewVersion() {
+    version = sh(returnStdout: true, script: "git describe --abbrev=0 --tags").trim()
+
+    major = sh(returnStdout: true, script: "echo ${version}|cut -d '.' -f1").trim().toInteger()
+    minor = sh(returnStdout: true, script: "echo ${version}|cut -d '.' -f2").trim().toInteger()
+    path = sh(returnStdout: true, script: "echo ${version}|cut -d '.' -f3").trim().toInteger()
+    path = path + 1
+    version = "${major}.${minor}.${path}"
+
+    def match = (version =~ env.VERSION_REGEX)
+    if (!match) { 
+        error 'Version is not matching a pattern.' 
+    }
+    return version
+}
+
+def createNewVersion(String imageVersion) {
+    now = new Date()
+    date = now.format("dd-MM-yy-HH:mm:ss", TimeZone.getTimeZone('Asia/Bangkok'))
+
+    sh """
+        git config --global user.email '${env.GITLAB_EMAIL}'
+        git config --global user.name '${env.GITLAB_USER}'
+        git tag -f -a ${imageVersion} \
+            -m 'Taged: ${env.GITLAB_USER}' \
+            -m 'Branch: ${runEnv}' \
+            -m 'Date: ${date}'
+        git push ${env.REPOSITORY_ACCESS}${GITLAB_SECRET_USR}:${GITLAB_SECRET_PSW}@${env.REPOSITORY_URL} ${imageVersion} -o ci.skip
+    """
+    return
+} 
