@@ -11,6 +11,6 @@ library(
   )
 )
 
-liveChannel {
-    appName = 'app-service'
+simplePipeline { // name of groovy file to use all function inside
+  appName = 'app-service'
 }   
