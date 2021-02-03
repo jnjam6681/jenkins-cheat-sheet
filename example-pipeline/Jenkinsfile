@@ -10,7 +10,7 @@ pipeline {
         
         GCP_PROJECT_ID = 'projec-1'
         PROJECT_NAME = 'project'
-        APP_NAME = "${config.APP_NAME}"
+        APP_NAME = "${env.GIT_URL.replaceFirst(/^.*\/([^\/]+?).git$/, '$1')}"
         VERSION_REGEX = /^(\d+\.)?(\d+\.)?(\*|\d+)$/
 
         GITLAB_SECRET = credentials('8933a2c7')
