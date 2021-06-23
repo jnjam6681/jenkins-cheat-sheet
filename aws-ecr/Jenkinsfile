@@ -1,0 +1,15 @@
+AWS_ACCOUNT_ID = '813046145810'
+AWS_ECR_REGION = 'ap-southeast-1'
+AWS_ECR_HOST = '${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_ECR_REGION}.amazonaws.com'
+AWS_ACCESS_KEY_JENKINS = '768af637-cab1-4161-a9b7-15e6c2270763'
+
+steps {
+    script {
+        docker.withRegistry('https://${env.AWS_ECR_HOST}', "gcr:${env.AWS_ECR_REGION}:${env.AWS_ACCESS_KEY_JENKINS}") {
+            // sh "docker tag ${env.APP_NAME} ${imageName}:latest"
+            sh "docker push ${imageName}:latest"
+            // sh "docker tag ${env.APP_NAME} ${imageName}:${imageVersion}"
+            sh "docker push ${imageName}:${imageVersion}"
+        }
+    }
+}
