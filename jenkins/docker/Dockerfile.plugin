@@ -1,0 +1,29 @@
+FROM jenkins/jenkins@sha256:99fd3cb74257d1df7678c19106586a2da127cd1b08484c9201c7130d4fab92c1
+ENV KUSTOMIZE_VERSION v4.1.2
+USER root
+RUN apt-get update && apt-get install -y apt-transport-https \
+       ca-certificates curl gnupg2 \
+       software-properties-common
+
+# install docker
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
+RUN apt-key fingerprint 0EBFCD88
+RUN add-apt-repository \
+       "deb [arch=amd64] https://download.docker.com/linux/debian \
+       $(lsb_release -cs) stable"
+RUN apt-get update && \
+       apt-get install -y docker-ce-cli && \
+       groupadd -g 999 docker && \
+       usermod -aG staff,docker jenkins
+
+# install kustomize
+RUN wget https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && \
+       tar xzf kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && \
+       mv kustomize /usr/local/bin/kustomize && \
+       rm -f kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
+
+USER jenkins
+
+# install plugins
+COPY plugins.txt usr/share/jenkins/ref/plugins.txt
+RUN /usr/local/bin/install-plugins.sh < usr/share/jenkins/ref/plugins.txt
